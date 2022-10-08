@@ -105,7 +105,10 @@ class WienerlinienSensor(Entity):
     @property
     def state(self):
         """Return state."""
-        return f"{self._state[:-2]}:{self._state[26:]}"
+        if self._state is None:
+            return self._state
+        else:
+            return f"{self._state[:-2]}:{self._state[26:]}"
 
     @property
     def icon(self):
