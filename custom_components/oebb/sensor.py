@@ -152,7 +152,10 @@ class OebbSensor(CoordinatorEntity, LightEntity):
             "startTime": data["journey"][self.idx]["ti"],
             "lastStop": data["journey"][self.idx]["lastStop"],
             "line": data["journey"][self.idx]["pr"],
+            #    "provider": "oebb",
         }
+
+        self._name = self.attributes["startTime"]
 
         now = datetime.now()
         date_string = now.strftime("%d/%m/%Y")
