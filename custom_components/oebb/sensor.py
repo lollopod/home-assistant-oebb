@@ -17,6 +17,8 @@ from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
+from homeassistant.components.light import LightEntity
+from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
@@ -58,44 +60,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
-    """Setup."""
-
-    params = {
-        "L": config.get(CONF_L),
-        "evaId": config.get(CONF_EVAID),
-        "boardType": config.get(CONF_BOARDTYPE),
-        "productsFilter": config.get(CONF_PRODUCTSFILTER),
-        "dirInput": config.get(CONF_DIRINPUT),
-        "tickerID": config.get(CONF_TICKERID),
-        "start": config.get(CONF_START),
-        "eqstops": config.get(CONF_EQSTOPS),
-        "showJourneys": config.get(CONF_SHOWJOURNEYS),
-        "additionalTime": config.get(CONF_ADDITIONALTIME),
-        "outputMode": "tickerDataOnly",
-    }
-
-    devices = []
-
-    api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
-    data = await api.get_json()
-    _LOGGER.debug(len(data["journey"]))
-
-
-`   coordinator = OebbAPI(hass, my_api)
-
-    devices.append(api)
-    for index, journey in enumerate(data["journey"]):
-        try:
-            name = "oebb_journey_" + str(index)
-        except Exception:
-            raise PlatformNotReady()
-        devices.append(OebbSensor(api, name, index, params["evaId"]))
-
-    add_devices_callback(devices, True)
-
-
-class OebbAPI(DataUpdateCoordinator):
+class OebbAPI:
     """Call API."""
 
     def __init__(self, session, loop, params):
@@ -113,7 +78,7 @@ class OebbAPI(DataUpdateCoordinator):
         self.url = req.url
         self._attr_unique_id = self.url
 
-    async def get_json(self):
+    async def fetch_data(self):
         """Get json from API endpoint."""
         value = None
 
@@ -132,82 +97,81 @@ class OebbAPI(DataUpdateCoordinator):
 
         return value
 
-    async def async_update(self):
-        """Update data for the entire API."""
+
+class OebbCoordinator(DataUpdateCoordinator):
+    """My custom coordinator."""
+
+    def __init__(self, hass, oebb_api: OebbAPI):
+        """Initialize my coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            # Name of the data. For logging purposes.
+            name="My sensor",
+            # Polling interval. Will only be polled if there are subscribers.
+            update_interval=timedelta(seconds=30),
+        )
+        self.oebb_api = oebb_api
+
+    async def _async_update_data(self):
+        """Fetch data from API endpoint.
+
+        This is the place to pre-process the data to lookup tables
+        so entities can quickly look up their data.
+        """
         try:
-            self.data = await self.get_json()
-            _LOGGER.debug(self.data)
-            if self.data is None:
-                return
-            # data = data.get("data", {})
-        except:
-            _LOGGER.debug("Could not get new state")
-            return
+            # Note: asyncio.TimeoutError and aiohttp.ClientError are already
+            # handled by the data update coordinator.
+            async with async_timeout.timeout(10):
+                return await self.oebb_api.fetch_data()
 
-    @property
-    def name(self):
-        """Return name."""
-        return self._name
-
-    @property
-    def state(self):
-        """Return state."""
-        return self._state
-
-    @property
-    def icon(self):
-        """Return icon."""
-        return "mdi:server-network"
-
-    @property
-    def extra_state_attributes(self):
-        """Return attributes."""
-        return self.attributes
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
 
 
-class OebbSensor(Entity):
+class OebbSensor(CoordinatorEntity, LightEntity):
     """OebbSensor."""
 
-    def __init__(self, api: OebbAPI, name, index, evaId):
-        """Initialize."""
-        self.api = api
-        self.index = index
-        self.formatted_index = f"{self.index:02}"
-        self._name = name
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
+        """Pass coordinator to CoordinatorEntity."""
+        super().__init__(coordinator)
+        self.idx = idx
+        self.formatted_idx = f"{self.idx:02}"
+        self._name = "oebb_journey_" + str(idx)
         self._state = None
         self.attributes = {}
-        self._attr_unique_id = str(evaId) + "_" + str(index)
 
-    async def async_update(self):
-        """Update data."""
+        self._attr_unique_id = str(evaId) + "_" + str(idx)
 
-        try:
-            # await self.api.async_update()
-            data = self.api.attributes
-            _LOGGER.debug(self.api.data)
-            if self.api.data is None:
-                return
-            # data = data.get("data", {})
-        except:
-            _LOGGER.debug("Could not get new state")
-            return
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        data = self.coordinator.data
 
-        try:
-            now = datetime.now()
-            timestamp_string = (
-                now.strftime("%m/%d/%Y")
-                + " "
-                + data["journey"][self.formatted_index]["ti"]
-            )
-            self._state = time.strptime(timestamp_string)
-            self.attributes = {
-                "startTime": data["journey"][self.formatted_index]["ti"],
-                "lastStop": data["journey"][self.formatted_index]["LastStop"],
-                "line": data["journey"][self.formatted_index]["pr"],
-            }
+        self.attributes = {
+            "startTime": data["journey"][self.idx]["ti"],
+            "lastStop": data["journey"][self.idx]["lastStop"],
+            "line": data["journey"][self.idx]["pr"],
+        }
 
-        except Exception:
-            pass
+        now = datetime.now()
+        date_string = now.strftime("%d/%m/%Y")
+        timestamp_string = date_string + " " + self.attributes["startTime"]
+
+        self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
+
+        self.async_write_ha_state()
+
+    # async def async_turn_on(self, **kwargs):
+    #     """Turn the light on.
+
+    #     Example method how to request data updates.
+    #     """
+    #     # Do the turning on.
+    #     # ...
+
+    #     # Update the data
+    #     await self.coordinator.async_request_refresh()
 
     @property
     def name(self):
@@ -233,3 +197,36 @@ class OebbSensor(Entity):
     def device_class(self):
         """Return device_class."""
         return "timestamp"
+
+
+async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
+    """Setup."""
+
+    params = {
+        "L": config.get(CONF_L),
+        "evaId": config.get(CONF_EVAID),
+        "boardType": config.get(CONF_BOARDTYPE),
+        "productsFilter": config.get(CONF_PRODUCTSFILTER),
+        "dirInput": config.get(CONF_DIRINPUT),
+        "tickerID": config.get(CONF_TICKERID),
+        "start": config.get(CONF_START),
+        "eqstops": config.get(CONF_EQSTOPS),
+        "showJourneys": config.get(CONF_SHOWJOURNEYS),
+        "additionalTime": config.get(CONF_ADDITIONALTIME),
+        "outputMode": "tickerDataOnly",
+    }
+
+    # devices = []
+    # api is my coordinator
+    api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
+    coordinator = OebbCoordinator(hass, api)
+    # data = await api.get_json()
+    # _LOGGER.debug(len(data["journey"]))
+
+    await coordinator.async_config_entry_first_refresh()
+
+    devices = []
+
+    for idx, entity in enumerate(coordinator.data):
+        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
+    add_devices_callback(devices, True)
