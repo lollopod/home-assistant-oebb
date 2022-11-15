@@ -1,20 +1,21 @@
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+
 
 # Get information about next departures
 
-A sensor platform which allows you to get information about departures from a specified Wiener Linien stop.
+A sensor platform which allows you to get information about departures from a specified OEBB stop.
 
-To get started install this with [HACS](https://hacs.xyz/)
+
+
+
+
 
 ## Example configuration.yaml
 
 ```yaml
 sensor:
-  platform: wienerlinien
-  firstnext: first
-  stops:
-    - '4429'
-    - '3230'
+  platform: oebb
+  evaId: 491116
+  dirInput: 491123
 ```
 
 ## Configuration variables
@@ -22,8 +23,14 @@ sensor:
 key | description
 -- | --
 **platform (Required)** | The platform name.
-**stops (Required)** | RBL stop ID's
-**firstnext (Optional)** | `first` or `next` departure.
+**evaID (Required)** | OEBB Stop ID
+**dirInput (Optional)** | OEBB stop ID - filter journey stopping there
+**boardType (Optional)** | ? 
+**tickerID (Optional)** | ? 
+**start (Optional)** | ? 
+**eqstop (Optional)** | ? 
+**showJourneys (Optional)** | ? number of journeys to retreive
+**additionalTime (Optional)** | ? offset to query next journeys
 
 ## Sample overview
 
@@ -31,10 +38,12 @@ key | description
 
 ## Notes
 
-You can find out the Stop ID (rbl number) thanks to [Matthias Bendel](https://github.com/mabe-at) [https://till.mabe.at/rbl/](https://till.mabe.at/rbl/)
+To retreive the parameters please vitit the website, choose your stop and check the iframe url:
+https://fahrplan.oebb.at/bin/stboard.exe/
+Additional info on the parameters can also be found on the getStationBoardDataOptions() docu in the mymro repo - Thanks!
 
+Sources: 
+https://github.com/mymro/oebb-api
 
-This platform is using the [Wienerlinien API](http://www.wienerlinien.at) API to get the information.
-'Datenquelle: Stadt Wien – data.wien.gv.at'
-Lizenz (CC BY 3.0 AT)
+This platform is using the [OEBB API]([https://fahrplan.oebb.at/bin/stboard.exe/]) API to get the information.
 
