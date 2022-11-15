@@ -155,7 +155,7 @@ class OebbSensor(CoordinatorEntity, LightEntity):
             #    "provider": "oebb",
         }
 
-        self._name = self.attributes["startTime"]
+        # self._name = self.attributes["startTime"]
 
         now = datetime.now()
         date_string = now.strftime("%d/%m/%Y")
