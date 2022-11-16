@@ -11,7 +11,7 @@ import async_timeout
 from requests.models import PreparedRequest
 import voluptuous as vol
 
-from config.custom_components.oebb.const import BASE_URL
+from .const import BASE_URL
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 
 # from homeassistant.exceptions import PlatformNotReady
