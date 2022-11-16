@@ -1,7 +1,7 @@
 """
 A integration that allows you to get information about next departure from specified stop.
 For more details about this component, please refer to the documentation at
-https://github.com/tofuSCHNITZEL/home-assistant-wienerlinien
+https://github.com/lollopod/home-assistant-oebb
 """
 from datetime import datetime, timedelta
 import json
@@ -19,7 +19,6 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
 
 # from homeassistant.helpers.entity import Entity
-from homeassistant.components.light import LightEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import (
@@ -92,9 +91,9 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     devices = []
 
-    for idx, entity in enumerate(coordinator.data):
+    for idx in range(params["showJourneys"]):
         devices.append(OebbSensor(coordinator, idx, params["evaId"]))
-        devices.append(OebbSensorHelper(coordinator, idx, params["evaId"]))
+        devices.append(OebbHelperSensor(coordinator, idx, params["evaId"]))
     add_devices_callback(devices, True)
 
 
@@ -122,15 +121,17 @@ class OebbAPI:
 
         _LOGGER.debug("Inside get JSON")
 
+        response = None
+
         try:
             async with async_timeout.timeout(10):
 
                 response = await self.session.get(self.url)
+                string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
+                value = json.loads(string)
 
         except Exception:
             pass
-        string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
-        value = json.loads(string)
 
         return value
 
@@ -229,7 +230,7 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         return "timestamp"
 
 
-class OebbSensorHelper(CoordinatorEntity, SensorEntity):
+class OebbHelperSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
     def __init__(self, coordinator: OebbCoordinator, idx, evaId):
