@@ -3,12 +3,12 @@
   "integration_type": "hub",
   "name": "OEBB",
   "version": "1.2.0",
-  "documentation": "https://github.com/tofuSCHNITZEL/home-assistant-wienerlinien",
-  "issue_tracker": "https://github.com/tofuSCHNITZEL/home-assistant-wienerlinien/issues",
+  "documentation": "https://github.com/lollopod/home-assistant-oebb",
+  "issue_tracker": "https://github.com/lollopod/home-assistant-oebb/issues",
   "dependencies": [ ],
   "codeowners": [
-    "@tofuSCHNITZEL"
+    "@lollopod"
   ],
-  "requirements": [ ],
+  "requirements": [ "pyowm" ],
   "iot_class": "cloud_polling"
 }
