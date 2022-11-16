@@ -3,7 +3,7 @@ A integration that allows you to get information about next departure from speci
 For more details about this component, please refer to the documentation at
 https://github.com/tofuSCHNITZEL/home-assistant-wienerlinien
 """
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 import json
 import logging
 
@@ -13,11 +13,14 @@ import voluptuous as vol
 
 from config.custom_components.oebb.const import BASE_URL
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.exceptions import PlatformNotReady
+
+# from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.entity import Entity
+
+# from homeassistant.helpers.entity import Entity
 from homeassistant.components.light import LightEntity
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -35,8 +38,7 @@ CONF_START = "start"
 CONF_EQSTOPS = "eqstops"
 CONF_SHOWJOURNEYS = "showJourneys"
 CONF_ADDITIONALTIME = "additionaTime"
-
-# https://fahrplan.oebb.at/bin/stboard.exe/dn?L=vs_liveticker&evaId=491116&boardType=dep&productsFilter=1011111111011&dirInput=491123&tickerID=dep&start=yes&eqstops=false&showJourneys=12&additionalTime=0&outputMode=tickerDataOnly
+CONF_ICON = "icon"
 
 
 SCAN_INTERVAL = timedelta(seconds=30)
@@ -53,11 +55,47 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_EQSTOPS, default="false"): cv.string,
         vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number,
         vol.Optional(CONF_ADDITIONALTIME, default=0): cv.Number,
+        # vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
     }
 )
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
+    """Setup."""
+
+    params = {
+        "L": config.get(CONF_L),
+        "evaId": config.get(CONF_EVAID),
+        "boardType": config.get(CONF_BOARDTYPE),
+        "productsFilter": config.get(CONF_PRODUCTSFILTER),
+        "dirInput": config.get(CONF_DIRINPUT),
+        "tickerID": config.get(CONF_TICKERID),
+        "start": config.get(CONF_START),
+        "eqstops": config.get(CONF_EQSTOPS),
+        "showJourneys": config.get(CONF_SHOWJOURNEYS),
+        "additionalTime": config.get(CONF_ADDITIONALTIME),
+        "outputMode": "tickerDataOnly",
+    }
+
+    # icon = config.get(CONF_ICON)
+    # devices = []
+    # api is my coordinator
+    api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
+    coordinator = OebbCoordinator(hass, api)
+    # data = await api.get_json()
+    # _LOGGER.debug(len(data["journey"]))
+
+    await coordinator.async_config_entry_first_refresh()
+
+    devices = []
+
+    for idx, entity in enumerate(coordinator.data):
+        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
+        devices.append(OebbSensorHelper(coordinator, idx, params["evaId"]))
+    add_devices_callback(devices, True)
 
 
 class OebbAPI:
@@ -92,7 +130,6 @@ class OebbAPI:
         except Exception:
             pass
         string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
-
         value = json.loads(string)
 
         return value
@@ -129,7 +166,7 @@ class OebbCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with API: {err}")
 
 
-class OebbSensor(CoordinatorEntity, LightEntity):
+class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
     def __init__(self, coordinator: OebbCoordinator, idx, evaId):
@@ -140,6 +177,7 @@ class OebbSensor(CoordinatorEntity, LightEntity):
         self._name = "oebb_journey_" + str(idx)
         self._state = None
         self.attributes = {}
+        # self.icon = icon
 
         self._attr_unique_id = str(evaId) + "_" + str(idx)
 
@@ -165,16 +203,53 @@ class OebbSensor(CoordinatorEntity, LightEntity):
 
         self.async_write_ha_state()
 
-    # async def async_turn_on(self, **kwargs):
-    #     """Turn the light on.
+    @property
+    def name(self):
+        """Return name."""
+        return self._name
 
-    #     Example method how to request data updates.
-    #     """
-    #     # Do the turning on.
-    #     # ...
+    @property
+    def state(self):
+        """Return state."""
+        return self._state
 
-    #     # Update the data
-    #     await self.coordinator.async_request_refresh()
+    @property
+    def icon(self):
+        """Return icon."""
+        return "mdi:tram"
+
+    @property
+    def extra_state_attributes(self):
+        """Return attributes."""
+        return self.attributes
+
+    @property
+    def device_class(self):
+        """Return device_class."""
+        return "timestamp"
+
+
+class OebbSensorHelper(CoordinatorEntity, SensorEntity):
+    """OebbSensor."""
+
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
+        """Pass coordinator to CoordinatorEntity."""
+        super().__init__(coordinator)
+        self.idx = idx
+        self.formatted_idx = f"{self.idx:02}"
+        self._name = "oebb_journey_helper_" + str(idx)
+        self._state = None
+
+        self._attr_unique_id = str(evaId) + "_helper_" + str(idx)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        data = self.coordinator.data
+
+        self._state = data["journey"][self.idx]["ti"]
+
+        self.async_write_ha_state()
 
     @property
     def name(self):
@@ -189,47 +264,4 @@ class OebbSensor(CoordinatorEntity, LightEntity):
     @property
     def icon(self):
         """Return icon."""
-        return "mdi:bus"
-
-    @property
-    def extra_state_attributes(self):
-        """Return attributes."""
-        return self.attributes
-
-    @property
-    def device_class(self):
-        """Return device_class."""
-        return "timestamp"
-
-
-async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
-    """Setup."""
-
-    params = {
-        "L": config.get(CONF_L),
-        "evaId": config.get(CONF_EVAID),
-        "boardType": config.get(CONF_BOARDTYPE),
-        "productsFilter": config.get(CONF_PRODUCTSFILTER),
-        "dirInput": config.get(CONF_DIRINPUT),
-        "tickerID": config.get(CONF_TICKERID),
-        "start": config.get(CONF_START),
-        "eqstops": config.get(CONF_EQSTOPS),
-        "showJourneys": config.get(CONF_SHOWJOURNEYS),
-        "additionalTime": config.get(CONF_ADDITIONALTIME),
-        "outputMode": "tickerDataOnly",
-    }
-
-    # devices = []
-    # api is my coordinator
-    api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
-    coordinator = OebbCoordinator(hass, api)
-    # data = await api.get_json()
-    # _LOGGER.debug(len(data["journey"]))
-
-    await coordinator.async_config_entry_first_refresh()
-
-    devices = []
-
-    for idx, entity in enumerate(coordinator.data):
-        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
-    add_devices_callback(devices, True)
+        return "mdi:tram"
