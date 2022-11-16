@@ -91,7 +91,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     devices = []
 
-    for idx in range(params["showJourneys"]):
+    for idx, journey in enumerate(coordinator.data["journey"]):
         devices.append(OebbSensor(coordinator, idx, params["evaId"]))
         devices.append(OebbHelperSensor(coordinator, idx, params["evaId"]))
     add_devices_callback(devices, True)
@@ -197,11 +197,13 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         # self._name = self.attributes["startTime"]
 
         now = datetime.now()
+
         date_string = now.strftime("%d/%m/%Y")
+        _LOGGER.debug("Date_string : %s", date_string)
         timestamp_string = date_string + " " + self.attributes["startTime"]
-
+        _LOGGER.debug("Timestamp_string %s:", timestamp_string)
         self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
-
+        _LOGGER.debug("State: %s:", self._state)
         self.async_write_ha_state()
 
     @property
