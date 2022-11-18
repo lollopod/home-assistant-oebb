@@ -120,14 +120,18 @@ class OebbAPI:
 
         _LOGGER.debug("Inside Fetch_data")
 
-        response = None
-
         try:
-            async with async_timeout.timeout(10):
 
-                response = await self.session.get(self.url)
-                string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
-                value = json.loads(string)
+            async with self.session.get(self.url) as resp:
+                _LOGGER.debug("Response status : %s", resp.status)
+                text = await resp.text()
+                value = json.loads(text.replace("\n", "")[13:])
+            # async with async_timeout.timeout(10):
+
+            #     response = await self.session.get(self.url)
+            #     response_json = await response.json()
+            #     string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
+            #     value = json.loads(string)
 
         except Exception:
             pass
