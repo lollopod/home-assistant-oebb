@@ -127,12 +127,6 @@ class OebbAPI:
             async with self.session.get(BASE_URL, params=self.params) as resp:
                 text = await resp.text()
                 value = json.loads(text.replace("\n", "")[13:])
-            # async with async_timeout.timeout(10):
-
-            #     response = await self.session.get(self.url)
-            #     response_json = await response.json()
-            #     string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
-            #     value = json.loads(string)
 
         except Exception:
             pass
@@ -149,7 +143,7 @@ class OebbCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             # Name of the data. For logging purposes.
-            name="My sensor",
+            name="OEBB Coordinator",
             # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(seconds=30),
         )
