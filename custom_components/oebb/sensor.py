@@ -82,7 +82,9 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     # icon = config.get(CONF_ICON)
     # devices = []
     # api is my coordinator
+
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
+    # api = OebbAPI(async_create_clientsession(hass, params), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
     # _LOGGER.debug(len(data["journey"]))
@@ -122,8 +124,7 @@ class OebbAPI:
 
         try:
 
-            async with self.session.get(self.url) as resp:
-                _LOGGER.debug("Response status : %s", resp.status)
+            async with self.session.get(BASE_URL, params=self.params) as resp:
                 text = await resp.text()
                 value = json.loads(text.replace("\n", "")[13:])
             # async with async_timeout.timeout(10):
@@ -163,7 +164,7 @@ class OebbCoordinator(DataUpdateCoordinator):
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
-            async with async_timeout.timeout(10):
+            async with async_timeout.timeout(20):
                 return await self.oebb_api.fetch_data()
 
         except Exception as err:
