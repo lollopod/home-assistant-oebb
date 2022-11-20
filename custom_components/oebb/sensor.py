@@ -82,7 +82,9 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     # icon = config.get(CONF_ICON)
     # devices = []
     # api is my coordinator
+
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
+    # api = OebbAPI(async_create_clientsession(hass, params), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
     # _LOGGER.debug(len(data["journey"]))
@@ -91,9 +93,8 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     devices = []
 
-    for idx in range(params["showJourneys"]):
+    for idx, journey in enumerate(coordinator.data["journey"]):
         devices.append(OebbSensor(coordinator, idx, params["evaId"]))
-        devices.append(OebbHelperSensor(coordinator, idx, params["evaId"]))
     add_devices_callback(devices, True)
 
 
@@ -119,16 +120,13 @@ class OebbAPI:
         """Get json from API endpoint."""
         value = None
 
-        _LOGGER.debug("Inside get JSON")
-
-        response = None
+        _LOGGER.debug("Inside Fetch_data")
 
         try:
-            async with async_timeout.timeout(10):
 
-                response = await self.session.get(self.url)
-                string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
-                value = json.loads(string)
+            async with self.session.get(BASE_URL, params=self.params) as resp:
+                text = await resp.text()
+                value = json.loads(text.replace("\n", "")[13:])
 
         except Exception:
             pass
@@ -145,7 +143,7 @@ class OebbCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             # Name of the data. For logging purposes.
-            name="My sensor",
+            name="OEBB Coordinator",
             # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(seconds=30),
         )
@@ -160,7 +158,7 @@ class OebbCoordinator(DataUpdateCoordinator):
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
-            async with async_timeout.timeout(10):
+            async with async_timeout.timeout(20):
                 return await self.oebb_api.fetch_data()
 
         except Exception as err:
@@ -173,6 +171,7 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: OebbCoordinator, idx, evaId):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
+
         self.idx = idx
         self.formatted_idx = f"{self.idx:02}"
         self._name = "oebb_journey_" + str(idx)
@@ -185,24 +184,29 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+
         data = self.coordinator.data
 
-        self.attributes = {
-            "startTime": data["journey"][self.idx]["ti"],
-            "lastStop": data["journey"][self.idx]["lastStop"],
-            "line": data["journey"][self.idx]["pr"],
-            #    "provider": "oebb",
-        }
+        if self.idx >= len(self.coordinator.data["journey"]):
+            _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
+            return
+        else:
+            self.attributes = {
+                "startTime": data["journey"][self.idx]["ti"],
+                "lastStop": data["journey"][self.idx]["lastStop"],
+                "line": data["journey"][self.idx]["pr"],
+            }
+            now = datetime.now()
+
+            date_string = now.strftime("%d/%m/%Y")
+            # _LOGGER.debug("Date_string : %s", date_string)
+            timestamp_string = date_string + " " + self.attributes["startTime"]
+            # _LOGGER.debug("Timestamp_string %s:", timestamp_string)
+            self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
+            # _LOGGER.debug("State: %s:", self._state)
+            self.async_write_ha_state()
 
         # self._name = self.attributes["startTime"]
-
-        now = datetime.now()
-        date_string = now.strftime("%d/%m/%Y")
-        timestamp_string = date_string + " " + self.attributes["startTime"]
-
-        self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
-
-        self.async_write_ha_state()
 
     @property
     def name(self):
@@ -228,41 +232,3 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
     def device_class(self):
         """Return device_class."""
         return "timestamp"
-
-
-class OebbHelperSensor(CoordinatorEntity, SensorEntity):
-    """OebbSensor."""
-
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
-        """Pass coordinator to CoordinatorEntity."""
-        super().__init__(coordinator)
-        self.idx = idx
-        self.formatted_idx = f"{self.idx:02}"
-        self._name = "oebb_journey_helper_" + str(idx)
-        self._state = None
-
-        self._attr_unique_id = str(evaId) + "_helper_" + str(idx)
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        data = self.coordinator.data
-
-        self._state = data["journey"][self.idx]["ti"]
-
-        self.async_write_ha_state()
-
-    @property
-    def name(self):
-        """Return name."""
-        return self._name
-
-    @property
-    def state(self):
-        """Return state."""
-        return self._state
-
-    @property
-    def icon(self):
-        """Return icon."""
-        return "mdi:tram"
