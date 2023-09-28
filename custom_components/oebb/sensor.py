@@ -195,8 +195,8 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
                 "startTime": data["journey"][self.idx]["ti"],
                 "lastStop": data["journey"][self.idx]["lastStop"],
                 "line": data["journey"][self.idx]["pr"],
-                "status": data["rt"][self.idx]["status"],
-                "delay": data["rt"][self.idx]["delay"],
+                "status": data["journey"][self.idx]["rt"]["status"] if not isinstance(data["journey"][self.idx]["rt"], bool) else None,
+                "delay": data["journey"][self.idx]["rt"]["dlm"] if not isinstance(data["journey"][self.idx]["rt"], bool) else 0,
                 "platform": data["journey"][self.idx]["tr"],
             }
             now = datetime.now()
