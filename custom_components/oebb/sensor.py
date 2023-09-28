@@ -195,6 +195,8 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
                 "startTime": data["journey"][self.idx]["ti"],
                 "lastStop": data["journey"][self.idx]["lastStop"],
                 "line": data["journey"][self.idx]["pr"],
+                "status": data["rt"][self.idx]["status"],
+                "delay": data["rt"][self.idx]["delay"],
             }
             now = datetime.now()
 
