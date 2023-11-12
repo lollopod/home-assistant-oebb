@@ -36,7 +36,7 @@ CONF_TICKERID = "tickerID"
 CONF_START = "start"
 CONF_EQSTOPS = "eqstops"
 CONF_SHOWJOURNEYS = "showJourneys"
-CONF_ADDITIONALTIME = "additionaTime"
+CONF_ADDITIONALTIME = "additionalTime"
 CONF_ICON = "icon"
 
 
