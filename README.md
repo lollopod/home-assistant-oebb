@@ -29,7 +29,7 @@ key | description
 **tickerID (Optional)** | ? 
 **start (Optional)** | ? 
 **eqstop (Optional)** | ? 
-**showJourneys (Optional)** | ? number of journeys to retreive
+**showJourneys (Optional)** | ? number of journeys to retrieve
 **additionalTime (Optional)** | ? offset to query next journeys
 
 ## Sample overview
@@ -38,7 +38,7 @@ key | description
 
 ## Notes
 
-To retreive the parameters please vitit the website, choose your stop and check the iframe url:
+To retrieve the parameters please vitit the website, choose your stop and check the iframe url:
 https://fahrplan.oebb.at/bin/stboard.exe/
 Additional info on the parameters can also be found on the getStationBoardDataOptions() docu in the mymro repo - Thanks!
 
