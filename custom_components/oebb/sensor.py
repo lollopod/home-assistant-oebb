@@ -26,6 +26,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+import html
 
 CONF_L = "L"
 CONF_EVAID = "evaId"
@@ -193,7 +194,7 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         else:
             self.attributes = {
                 "startTime": data["journey"][self.idx]["ti"],
-                "lastStop": data["journey"][self.idx]["lastStop"],
+                "lastStop": html.unescape(data["journey"][self.idx]["lastStop"]),
                 "line": data["journey"][self.idx]["pr"],
             }
             now = datetime.now()
