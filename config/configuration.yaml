@@ -9,13 +9,5 @@ debugpy:
 
 sensor:
   - platform: oebb
-    stops: '4429'
-    firstnext: first
-  - platform: oebb
-    stops: '4429'
-    firstnext: next
-  - platform: oebb
-    firstnext: first
-    stops:
-      - '4429'
-      - '3230'
+    evaId: 491116
+    dirInput: 491123
