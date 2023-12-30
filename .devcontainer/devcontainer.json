@@ -18,7 +18,8 @@
                 "github.vscode-pull-request-github",
                 "ryanluker.vscode-coverage-gutters",
                 "ms-python.vscode-pylance",
-                "eamodio.gitlens"
+                "eamodio.gitlens",
+                "ms-python.black-formatter"
             ],
             "settings": {
                 "files.eol": "\n",
