@@ -28,6 +28,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 CONF_L = "L"
+CONF_NAME = "name"
 CONF_EVAID = "evaId"
 CONF_BOARDTYPE = "boardType"
 CONF_PRODUCTSFILTER = "productsFilter"
@@ -36,15 +37,15 @@ CONF_TICKERID = "tickerID"
 CONF_START = "start"
 CONF_EQSTOPS = "eqstops"
 CONF_SHOWJOURNEYS = "showJourneys"
-CONF_ADDITIONALTIME = "additionalTime"
+CONF_ADDITIONALTIME = "additionaTime"
 CONF_ICON = "icon"
-
 
 SCAN_INTERVAL = timedelta(seconds=30)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Optional(CONF_L, default="vs_liveticker"): cv.string,
+        vol.Optional(CONF_NAME, default="oebb_journey"): cv.string,
         vol.Required(CONF_EVAID, default=None): cv.Number,
         vol.Optional(CONF_BOARDTYPE, default="dep"): cv.string,
         vol.Optional(CONF_PRODUCTSFILTER, default=1011111111011): cv.Number,
@@ -54,7 +55,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_EQSTOPS, default="false"): cv.string,
         vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number,
         vol.Optional(CONF_ADDITIONALTIME, default=0): cv.Number,
-        # vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
+        vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
     }
 )
 
@@ -67,6 +68,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     params = {
         "L": config.get(CONF_L),
+        "name": config.get(CONF_NAME),
         "evaId": config.get(CONF_EVAID),
         "boardType": config.get(CONF_BOARDTYPE),
         "productsFilter": config.get(CONF_PRODUCTSFILTER),
@@ -82,9 +84,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     # icon = config.get(CONF_ICON)
     # devices = []
     # api is my coordinator
-
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
-    # api = OebbAPI(async_create_clientsession(hass, params), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
     # _LOGGER.debug(len(data["journey"]))
@@ -94,7 +94,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     devices = []
 
     for idx, journey in enumerate(coordinator.data["journey"]):
-        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
+        devices.append(OebbSensor(coordinator, idx, params[CONF_EVAID], params[CONF_NAME]))
     add_devices_callback(devices, True)
 
 
@@ -122,11 +122,14 @@ class OebbAPI:
 
         _LOGGER.debug("Inside Fetch_data")
 
-        try:
+        response = None
 
-            async with self.session.get(BASE_URL, params=self.params) as resp:
-                text = await resp.text()
-                value = json.loads(text.replace("\n", "")[13:])
+        try:
+            async with async_timeout.timeout(10):
+
+                response = await self.session.get(self.url)
+                string = str(response.content._buffer[0]).replace("\\n", "")[16:-1]
+                value = json.loads(string)
 
         except Exception:
             pass
@@ -143,7 +146,7 @@ class OebbCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             # Name of the data. For logging purposes.
-            name="OEBB Coordinator",
+            name="My sensor",
             # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(seconds=30),
         )
@@ -158,7 +161,7 @@ class OebbCoordinator(DataUpdateCoordinator):
         try:
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
-            async with async_timeout.timeout(20):
+            async with async_timeout.timeout(10):
                 return await self.oebb_api.fetch_data()
 
         except Exception as err:
@@ -168,16 +171,16 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
         self.idx = idx
         self.formatted_idx = f"{self.idx:02}"
-        self._name = "oebb_journey_" + str(idx)
+        self._name = sensorName + "_" + str(idx)
         self._state = None
         self.attributes = {}
-        # self.icon = icon
+        self.icon = icon
 
         self._attr_unique_id = str(evaId) + "_" + str(idx)
 
@@ -193,8 +196,12 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         else:
             self.attributes = {
                 "startTime": data["journey"][self.idx]["ti"],
+                "startDate": data["journey"][self.idx]["da"],
                 "lastStop": data["journey"][self.idx]["lastStop"],
                 "line": data["journey"][self.idx]["pr"],
+                "status": data["journey"][self.idx]["rt"]["status"] if not isinstance(data["journey"][self.idx]["rt"], bool) else None,
+                "delay": data["journey"][self.idx]["rt"]["dlm"] if not isinstance(data["journey"][self.idx]["rt"], bool) else 0,
+                "platform": data["journey"][self.idx]["tr"],
             }
             now = datetime.now()
 
