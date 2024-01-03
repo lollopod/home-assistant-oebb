@@ -1,2 +1,5 @@
 black==22.3.0
 pre-commit==2.19.0
+colorlog==6.7.0
+homeassistant==2023.8.0
+pip>=21.0,<23.2
