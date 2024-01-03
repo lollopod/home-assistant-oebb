@@ -27,7 +27,6 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 import html
-from itertools import islice
 
 CONF_L = "L"
 CONF_NAME = "name"
@@ -106,8 +105,15 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     journeys = coordinator.data["journey"]
     
     if(len(journeys) > 0):
+        ids = []
         for idx, journey in enumerate(islice(journeys, showJourneys)):
-            devices.append(OebbSensor(coordinator, idx, evaId, name))
+            # only use unique journeys (non unique journeys happen when eqstops are existing)
+            if journey["id"] not in ids:
+                devices.append(OebbSensor(coordinator, idx, evaId, name))
+                ids.append(journey["id"])
+            # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
+            if len(ids) == showJourneys: 
+                break
     else:
         _LOGGER.warning("No journeys found for EVA ID %s and name %s", evaId, name)
        
