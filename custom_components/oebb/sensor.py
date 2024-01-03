@@ -107,10 +107,10 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     if(len(journeys) > 0):
         ids = []
         nr = 0
-        for idx, journey in enumerate(journeys, showJourneys):
+        for  journey in journeys:
             # only use unique journeys (non unique journeys happen when eqstops are existing)
             if journey["id"] not in ids:
-                devices.append(OebbSensor(coordinator, idx, evaId, name, nr))
+                devices.append(OebbSensor(coordinator, journey, evaId, name, nr))
                 ids.append(journey["id"])
                 nr = nr + 1
             # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
@@ -192,12 +192,11 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName, sensorNr):
+    def __init__(self, coordinator: OebbCoordinator, journey, evaId, sensorName, sensorNr):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
-        self.idx = idx
-        self.formatted_idx = f"{self.idx:02}"
+        self.journey = journey
         self._name = sensorName + "_" + str(sensorNr)
         self._state = None
         self.attributes = {}
@@ -209,28 +208,24 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
 
-        data = self.coordinator.data
+        journey = self.journey
 
-        if self.idx >= len(self.coordinator.data["journey"]):
-            _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
-            return
-        else:
-            self.attributes = {
-                "startTime": data["journey"][self.idx]["ti"],
-                "startDate": data["journey"][self.idx]["da"],
-                "lastStop": html.unescape(data["journey"][self.idx]["lastStop"]),
-                "line": data["journey"][self.idx]["pr"],
-                "rt": data["journey"][self.idx]["rt"],
-            }
-            now = datetime.now()
+        self.attributes = {
+            "startTime": journey["ti"],
+            "startDate": journey["da"],
+            "lastStop": html.unescape(journey["lastStop"]),
+            "line": journey["pr"],
+            "rt": journey["rt"],
+        }
+        now = datetime.now()
 
-            date_string = now.strftime("%d/%m/%Y")
-            # _LOGGER.debug("Date_string : %s", date_string)
-            timestamp_string = date_string + " " + self.attributes["startTime"]
-            # _LOGGER.debug("Timestamp_string %s:", timestamp_string)
-            self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
-            # _LOGGER.debug("State: %s:", self._state)
-            self.async_write_ha_state()
+        date_string = now.strftime("%d/%m/%Y")
+        # _LOGGER.debug("Date_string : %s", date_string)
+        timestamp_string = date_string + " " + self.attributes["startTime"]
+        # _LOGGER.debug("Timestamp_string %s:", timestamp_string)
+        self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
+        # _LOGGER.debug("State: %s:", self._state)
+        self.async_write_ha_state()
 
         # self._name = self.attributes["startTime"]
 
