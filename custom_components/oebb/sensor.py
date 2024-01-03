@@ -66,11 +66,8 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
     """Setup."""
-    now = datetime.now()
-    tomorrow = now + timedelta(days=1)
     evaId = config.get(CONF_EVAID)
     name = config.get(CONF_NAME)
-    showJourneys = config.get(CONF_SHOWJOURNEYS)
 
     params = {
         "L": config.get(CONF_L),
@@ -83,9 +80,6 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
         "eqstops": config.get(CONF_EQSTOPS),
         "showJourneys": config.get(CONF_SHOWJOURNEYS),
         "additionalTime": config.get(CONF_ADDITIONALTIME),
-        "selectDate": "period",
-        "dateBegin": now.strftime("%d.%m.%Y"),
-        "dateEnd": tomorrow.strftime("%d.%m.%Y"),
         "outputMode": "tickerDataOnly",
     }
 
@@ -95,27 +89,17 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
-    # _LOGGER.debug(len(data["journey"]))
+    # _LOGGER.debug(len(data))
 
     await coordinator.async_config_entry_first_refresh()
 
     devices = []
 
-
-    journeys = coordinator.data["journey"]
+    journeys = coordinator.data
     
     if(len(journeys) > 0):
-        ids = []
-        nr = 0
-        for  journey in journeys:
-            # only use unique journeys (non unique journeys happen when eqstops are existing)
-            if journey["id"] not in ids:
-                devices.append(OebbSensor(coordinator, journey, evaId, name, nr))
-                ids.append(journey["id"])
-                nr = nr + 1
-            # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
-            if len(ids) == showJourneys: 
-                break
+        for idx, journey in enumerate(journeys):
+           devices.append(OebbSensor(coordinator, idx, evaId, name))
     else:
         _LOGGER.warning("No journeys found for EVA ID %s and name %s", evaId, name)
        
@@ -146,12 +130,28 @@ class OebbAPI:
 
         _LOGGER.debug("Inside Fetch_data")
 
+        now = datetime.now()
+        tomorrow = now + timedelta(days=1)
+        showJourneys = self.params["showJourneys"]
+        
+        self.params["selectDate"] = "period"
+        self.params["dateBegin"] =  now.strftime("%d.%m.%Y")
+        self.params["dateEnd"] = tomorrow.strftime("%d.%m.%Y")
+		
         try:
-
             async with self.session.get(BASE_URL, params=self.params) as resp:
                 text = await resp.text()
-                value = json.loads(text.replace("\n", "")[13:])
-
+                journeys = json.loads(text.replace("\n", "")[13:])["journey"]
+                ids = []
+                value = []
+                for  journey in journeys:
+                    # only use unique journeys (non unique journeys happen when eqstops are existing)
+                    if journey["id"] not in ids:
+                        value.append(journey)
+                        ids.append(journey["id"])
+                    # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
+                    if len(ids) == showJourneys: 
+                        break
         except Exception:
             pass
 
@@ -192,40 +192,45 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, journey, evaId, sensorName, sensorNr):
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
-        self.journey = journey
-        self._name = sensorName + "_" + str(sensorNr)
+        self.idx = idx
+        self.formatted_idx = f"{self.idx:02}"
+        self._name = sensorName + "_" + str(idx)
         self._state = None
         self.attributes = {}
         #self.icon = icon
 
-        self._attr_unique_id = sensorName + "_" + str(sensorNr)
+        self._attr_unique_id = sensorName + "_" + str(idx)
 
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
 
-        journey = self.journey
+        data = self.coordinator.data
 
-        self.attributes = {
-            "startTime": journey["ti"],
-            "startDate": journey["da"],
-            "lastStop": html.unescape(journey["lastStop"]),
-            "line": journey["pr"],
-            "rt": journey["rt"],
-        }
-        now = datetime.now()
+        if self.idx >= len(data):
+            _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
+            return
+        else:
+            self.attributes = {
+                "startTime": data[self.idx]["ti"],
+                "startDate": data[self.idx]["da"],
+                "lastStop": html.unescape(data[self.idx]["lastStop"]),
+                "line": data[self.idx]["pr"],
+                "rt": data[self.idx]["rt"],
+            }
+            now = datetime.now()
 
-        date_string = now.strftime("%d/%m/%Y")
-        # _LOGGER.debug("Date_string : %s", date_string)
-        timestamp_string = date_string + " " + self.attributes["startTime"]
-        # _LOGGER.debug("Timestamp_string %s:", timestamp_string)
-        self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
-        # _LOGGER.debug("State: %s:", self._state)
-        self.async_write_ha_state()
+            date_string = now.strftime("%d/%m/%Y")
+            # _LOGGER.debug("Date_string : %s", date_string)
+            timestamp_string = date_string + " " + self.attributes["startTime"]
+            # _LOGGER.debug("Timestamp_string %s:", timestamp_string)
+            self._state = datetime.strptime(timestamp_string, "%d/%m/%Y %H:%M")
+            # _LOGGER.debug("State: %s:", self._state)
+            self.async_write_ha_state()
 
         # self._name = self.attributes["startTime"]
 
