@@ -106,11 +106,13 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     
     if(len(journeys) > 0):
         ids = []
-        for idx, journey in enumerate(islice(journeys, showJourneys)):
+        nr = 0
+        for idx, journey in enumerate(journeys, showJourneys):
             # only use unique journeys (non unique journeys happen when eqstops are existing)
             if journey["id"] not in ids:
-                devices.append(OebbSensor(coordinator, idx, evaId, name))
+                devices.append(OebbSensor(coordinator, idx, evaId, name, nr))
                 ids.append(journey["id"])
+                nr = nr + 1
             # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
             if len(ids) == showJourneys: 
                 break
@@ -190,18 +192,18 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName):
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName, sensorNr):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
         self.idx = idx
         self.formatted_idx = f"{self.idx:02}"
-        self._name = sensorName + "_" + str(idx)
+        self._name = sensorName + "_" + str(sensorNr)
         self._state = None
         self.attributes = {}
         #self.icon = icon
 
-        self._attr_unique_id = sensorName + "_" + str(evaId) + "_" + str(idx)
+        self._attr_unique_id = sensorName + "_" + str(sensorNr)
 
     @callback
     def _handle_coordinator_update(self) -> None:
