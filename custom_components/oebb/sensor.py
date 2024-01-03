@@ -27,8 +27,10 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 import html
+from itertools import islice
 
 CONF_L = "L"
+CONF_NAME = "name"
 CONF_EVAID = "evaId"
 CONF_BOARDTYPE = "boardType"
 CONF_PRODUCTSFILTER = "productsFilter"
@@ -40,12 +42,12 @@ CONF_SHOWJOURNEYS = "showJourneys"
 CONF_ADDITIONALTIME = "additionalTime"
 CONF_ICON = "icon"
 
-
 SCAN_INTERVAL = timedelta(seconds=30)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Optional(CONF_L, default="vs_liveticker"): cv.string,
+        vol.Optional(CONF_NAME, default="oebb_journey"): cv.string,
         vol.Required(CONF_EVAID, default=None): cv.Number,
         vol.Optional(CONF_BOARDTYPE, default="dep"): cv.string,
         vol.Optional(CONF_PRODUCTSFILTER, default=1011111111011): cv.Number,
@@ -53,9 +55,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_TICKERID, default="dep"): cv.string,
         vol.Optional(CONF_START, default="yes"): cv.string,
         vol.Optional(CONF_EQSTOPS, default="false"): cv.string,
-        vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number,
+        vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number, 
         vol.Optional(CONF_ADDITIONALTIME, default=0): cv.Number,
-        # vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
+        #vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
     }
 )
 
@@ -65,6 +67,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
     """Setup."""
+    now = datetime.now()
+    tomorrow = now + timedelta(days=1)
+    evaId = config.get(CONF_EVAID)
+    name = config.get(CONF_NAME)
+    showJourneys = config.get(CONF_SHOWJOURNEYS)
 
     params = {
         "L": config.get(CONF_L),
@@ -77,15 +84,16 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
         "eqstops": config.get(CONF_EQSTOPS),
         "showJourneys": config.get(CONF_SHOWJOURNEYS),
         "additionalTime": config.get(CONF_ADDITIONALTIME),
+        "selectDate": "period",
+        "dateBegin": now.strftime("%d.%m.%Y"),
+        "dateEnd": tomorrow.strftime("%d.%m.%Y"),
         "outputMode": "tickerDataOnly",
     }
 
     # icon = config.get(CONF_ICON)
     # devices = []
     # api is my coordinator
-
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
-    # api = OebbAPI(async_create_clientsession(hass, params), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
     # _LOGGER.debug(len(data["journey"]))
@@ -94,8 +102,15 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     devices = []
 
-    for idx, journey in enumerate(coordinator.data["journey"]):
-        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
+
+    journeys = coordinator.data["journey"]
+    
+    if(len(journeys) > 0):
+        for idx, journey in enumerate(islice(journeys, showJourneys)):
+            devices.append(OebbSensor(coordinator, idx, evaId, name))
+    else:
+        _LOGGER.warning("No journeys found for EVA ID %s and name %s", evaId, name)
+       
     add_devices_callback(devices, True)
 
 
@@ -169,18 +184,18 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
         self.idx = idx
         self.formatted_idx = f"{self.idx:02}"
-        self._name = "oebb_journey_" + str(idx)
+        self._name = sensorName + "_" + str(idx)
         self._state = None
         self.attributes = {}
-        # self.icon = icon
+        #self.icon = icon
 
-        self._attr_unique_id = str(evaId) + "_" + str(idx)
+        self._attr_unique_id = sensorName + "_" + str(evaId) + "_" + str(idx)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -194,8 +209,10 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         else:
             self.attributes = {
                 "startTime": data["journey"][self.idx]["ti"],
+                "startDate": data["journey"][self.idx]["da"],
                 "lastStop": html.unescape(data["journey"][self.idx]["lastStop"]),
                 "line": data["journey"][self.idx]["pr"],
+                "rt": data["journey"][self.idx]["rt"],
             }
             now = datetime.now()
 
