@@ -1,0 +1,13 @@
+default_config:
+
+logger:
+  default: info
+  logs:
+    custom_components.oebb: debug
+
+debugpy:
+
+sensor:
+  - platform: oebb
+    evaId: 491116
+    dirInput: 491123
