@@ -214,10 +214,14 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
         else:
             self.attributes = {
                 "startTime": data[self.idx]["ti"],
+                "arrivalTime": data[self.idx]["ati"],
                 "startDate": data[self.idx]["da"],
                 "lastStop": html.unescape(data[self.idx]["lastStop"]),
                 "line": data[self.idx]["pr"],
-                "rt": data[self.idx]["rt"],
+                "platform": data[self.idx]["tr"],
+                "status": data[self.idx]["rt"]["status"] if not isinstance(data[self.idx]["rt"], bool) else None,
+                "delay": data[self.idx]["rt"]["dlm"] if not isinstance(data[self.idx]["rt"], bool) else 0,
+                "delayTime": data[self.idx]["rt"]["dlt"] if not isinstance(data[self.idx]["rt"], bool) else None
             }
             now = datetime.now()
 
