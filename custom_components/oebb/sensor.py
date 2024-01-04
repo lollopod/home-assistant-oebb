@@ -68,6 +68,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     """Setup."""
     evaId = config.get(CONF_EVAID)
     name = config.get(CONF_NAME)
+    showJourneys = config.get(CONF_SHOWJOURNEYS)
 
     params = {
         "L": config.get(CONF_L),
@@ -78,7 +79,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
         "tickerID": config.get(CONF_TICKERID),
         "start": config.get(CONF_START),
         "eqstops": config.get(CONF_EQSTOPS),
-        "showJourneys": config.get(CONF_SHOWJOURNEYS),
+        "showJourneys": showJourneys,
         "additionalTime": config.get(CONF_ADDITIONALTIME),
         "outputMode": "tickerDataOnly",
     }
@@ -95,13 +96,8 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
 
     devices = []
 
-    journeys = coordinator.data
-    
-    if(len(journeys) > 0):
-        for idx, journey in enumerate(journeys):
-           devices.append(OebbSensor(coordinator, idx, evaId, name))
-    else:
-        _LOGGER.warning("No journeys found for EVA ID %s and name %s", evaId, name)
+    for idx in range(showJourneys):
+       devices.append(OebbSensor(coordinator, idx, evaId, name))
        
     add_devices_callback(devices, True)
 
@@ -135,6 +131,7 @@ class OebbAPI:
         showJourneys = self.params["showJourneys"]
         
         self.params["selectDate"] = "period"
+        self.params["time"] = now.strftime("%H:%M")
         self.params["dateBegin"] =  now.strftime("%d.%m.%Y")
         self.params["dateEnd"] = tomorrow.strftime("%d.%m.%Y")
 		
@@ -211,7 +208,7 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
 
         data = self.coordinator.data
 
-        if self.idx >= len(data):
+        if data is None or self.idx >= len(data):
             _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
             return
         else:
