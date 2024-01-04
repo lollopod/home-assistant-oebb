@@ -212,17 +212,27 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
             _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
             return
         else:
+            
+            #rt is false if on time
+            #rt status is none if delay
+            #rt status is Ausfall if cancelled
+            rt = data[self.idx]["rt"]
+            status = "on_time" if rt == False else "delay" if rt["status"] == None else "cancelled" 
+            
             self.attributes = {
                 "startTime": data[self.idx]["ti"],
                 "arrivalTime": data[self.idx]["ati"],
                 "startDate": data[self.idx]["da"],
                 "lastStop": html.unescape(data[self.idx]["lastStop"]),
                 "line": data[self.idx]["pr"],
-                "platform": data[self.idx]["tr"],
-                "status": data[self.idx]["rt"]["status"] if not isinstance(data[self.idx]["rt"], bool) else None,
-                "delay": data[self.idx]["rt"]["dlm"] if not isinstance(data[self.idx]["rt"], bool) else 0,
-                "delayTime": data[self.idx]["rt"]["dlt"] if not isinstance(data[self.idx]["rt"], bool) else None
+                "status": status 
             }
+            if(data[self.idx]["tr"] != ""):
+                self.attributes["platform"] = data[self.idx]["tr"]
+            if status != "on_time":
+                self.attributes["delay"] = rt["dlm"]
+                self.attributes["delayTime"] = rt["dlt"]
+            
             now = datetime.now()
 
             date_string = now.strftime("%d/%m/%Y")
