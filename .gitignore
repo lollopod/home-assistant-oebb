@@ -1,1 +1,10 @@
+# artifacts
 __pycache__
+.pytest*
+*.egg-info
+*/build/*
+*/dist/*
+
+# Home Assistant configuration
+config/*
+!config/configuration.yaml
