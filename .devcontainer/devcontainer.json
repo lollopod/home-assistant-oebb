@@ -1,6 +1,8 @@
 {
     "name": "oebb devcontainer",
-    "build": { "dockerfile": "Dockerfile" },
+    "build": { "dockerfile": "Dockerfile",
+        "context": ".."
+    },
     "postCreateCommand": "scripts/setup",
     "forwardPorts": [
         8123
