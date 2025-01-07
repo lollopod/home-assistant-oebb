@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import (
 import html
 
 CONF_L = "L"
+CONF_NAME = "name"
 CONF_EVAID = "evaId"
 CONF_BOARDTYPE = "boardType"
 CONF_PRODUCTSFILTER = "productsFilter"
@@ -40,12 +41,12 @@ CONF_SHOWJOURNEYS = "showJourneys"
 CONF_ADDITIONALTIME = "additionalTime"
 CONF_ICON = "icon"
 
-
 SCAN_INTERVAL = timedelta(seconds=30)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Optional(CONF_L, default="vs_liveticker"): cv.string,
+        vol.Optional(CONF_NAME, default="oebb_journey"): cv.string,
         vol.Required(CONF_EVAID, default=None): cv.Number,
         vol.Optional(CONF_BOARDTYPE, default="dep"): cv.string,
         vol.Optional(CONF_PRODUCTSFILTER, default=1011111111011): cv.Number,
@@ -53,9 +54,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_TICKERID, default="dep"): cv.string,
         vol.Optional(CONF_START, default="yes"): cv.string,
         vol.Optional(CONF_EQSTOPS, default="false"): cv.string,
-        vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number,
+        vol.Optional(CONF_SHOWJOURNEYS, default=12): cv.Number, 
         vol.Optional(CONF_ADDITIONALTIME, default=0): cv.Number,
-        # vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
+        #vol.Optional(CONF_ICON, default="mdi:tram"): cv.string,
     }
 )
 
@@ -65,6 +66,9 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_platform(hass, config, add_devices_callback, discovery_info=None):
     """Setup."""
+    evaId = config.get(CONF_EVAID)
+    name = config.get(CONF_NAME)
+    showJourneys = config.get(CONF_SHOWJOURNEYS)
 
     params = {
         "L": config.get(CONF_L),
@@ -75,7 +79,7 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
         "tickerID": config.get(CONF_TICKERID),
         "start": config.get(CONF_START),
         "eqstops": config.get(CONF_EQSTOPS),
-        "showJourneys": config.get(CONF_SHOWJOURNEYS),
+        "showJourneys": showJourneys,
         "additionalTime": config.get(CONF_ADDITIONALTIME),
         "outputMode": "tickerDataOnly",
     }
@@ -83,19 +87,18 @@ async def async_setup_platform(hass, config, add_devices_callback, discovery_inf
     # icon = config.get(CONF_ICON)
     # devices = []
     # api is my coordinator
-
     api = OebbAPI(async_create_clientsession(hass), hass.loop, params)
-    # api = OebbAPI(async_create_clientsession(hass, params), hass.loop, params)
     coordinator = OebbCoordinator(hass, api)
     # data = await api.get_json()
-    # _LOGGER.debug(len(data["journey"]))
+    # _LOGGER.debug(len(data))
 
     await coordinator.async_config_entry_first_refresh()
 
     devices = []
 
-    for idx, journey in enumerate(coordinator.data["journey"]):
-        devices.append(OebbSensor(coordinator, idx, params["evaId"]))
+    for idx in range(showJourneys):
+       devices.append(OebbSensor(coordinator, idx, evaId, name))
+       
     add_devices_callback(devices, True)
 
 
@@ -123,12 +126,29 @@ class OebbAPI:
 
         _LOGGER.debug("Inside Fetch_data")
 
+        now = datetime.now()
+        tomorrow = now + timedelta(days=1)
+        showJourneys = self.params["showJourneys"]
+        
+        self.params["selectDate"] = "period"
+        self.params["time"] = now.strftime("%H:%M")
+        self.params["dateBegin"] =  now.strftime("%d.%m.%Y")
+        self.params["dateEnd"] = tomorrow.strftime("%d.%m.%Y")
+		
         try:
-
             async with self.session.get(BASE_URL, params=self.params) as resp:
                 text = await resp.text()
-                value = json.loads(text.replace("\n", "")[13:])
-
+                journeys = json.loads(text.replace("\n", "")[13:])["journey"]
+                ids = []
+                value = []
+                for  journey in journeys:
+                    # only use unique journeys (non unique journeys happen when eqstops are existing)
+                    if journey["id"] not in ids:
+                        value.append(journey)
+                        ids.append(journey["id"])
+                    # stop if we have enough journeys (filter is not working correctly in api when specifying date filters)
+                    if len(ids) == showJourneys: 
+                        break
         except Exception:
             pass
 
@@ -169,18 +189,18 @@ class OebbCoordinator(DataUpdateCoordinator):
 class OebbSensor(CoordinatorEntity, SensorEntity):
     """OebbSensor."""
 
-    def __init__(self, coordinator: OebbCoordinator, idx, evaId):
+    def __init__(self, coordinator: OebbCoordinator, idx, evaId, sensorName):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
 
         self.idx = idx
         self.formatted_idx = f"{self.idx:02}"
-        self._name = "oebb_journey_" + str(idx)
+        self._name = sensorName + "_" + str(idx)
         self._state = None
         self.attributes = {}
-        # self.icon = icon
+        #self.icon = icon
 
-        self._attr_unique_id = str(evaId) + "_" + str(idx)
+        self._attr_unique_id = sensorName + "_" + str(idx)
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -188,15 +208,31 @@ class OebbSensor(CoordinatorEntity, SensorEntity):
 
         data = self.coordinator.data
 
-        if self.idx >= len(self.coordinator.data["journey"]):
+        if data is None or self.idx >= len(data):
             _LOGGER.warning("Sensor %d out of coordinator data range", self.idx)
             return
         else:
+            
+            #rt is false if on time
+            #rt status is none if delay
+            #rt status is Ausfall if cancelled
+            rt = data[self.idx]["rt"]
+            status = "on_time" if rt == False else "delay" if rt["status"] == None else "cancelled" 
+            
             self.attributes = {
-                "startTime": data["journey"][self.idx]["ti"],
-                "lastStop": html.unescape(data["journey"][self.idx]["lastStop"]),
-                "line": data["journey"][self.idx]["pr"],
+                "startTime": data[self.idx]["ti"],
+                "arrivalTime": data[self.idx]["ati"],
+                "startDate": data[self.idx]["da"],
+                "lastStop": html.unescape(data[self.idx]["lastStop"]),
+                "line": data[self.idx]["pr"],
+                "status": status 
             }
+            if(data[self.idx]["tr"] != ""):
+                self.attributes["platform"] = data[self.idx]["tr"]
+            if status != "on_time":
+                self.attributes["delay"] = rt["dlm"]
+                self.attributes["delayTime"] = rt["dlt"]
+            
             now = datetime.now()
 
             date_string = now.strftime("%d/%m/%Y")

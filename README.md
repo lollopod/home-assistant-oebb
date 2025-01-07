@@ -23,6 +23,7 @@ sensor:
 key | description
 -- | --
 **platform (Required)** | The platform name.
+**name (Optional)** | Name of the sensor to add multiple stations.
 **evaID (Required)** | OEBB Stop ID
 **dirInput (Optional)** | OEBB stop ID - filter journey stopping there
 **boardType (Optional)** | ? 
